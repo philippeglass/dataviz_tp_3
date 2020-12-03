@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<head>
+  <title>Carto covid</title>
+  <meta charset="UTF-8" />
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <script>
+    /* */
+    console.log("step0");
+    var width = 700,
+      height = 580;
+
+    var svg = d3
+      .select("body")
+      .append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+    // On rajoute un groupe englobant toute la visualisation pour plus tard
+    var g = svg.append("g");
+
+    var projection = d3
+      //.geoAlbersUsa()
+      .geoConicConformal()
+      .center([2.454071, 46.279229]) // Center on France
+      //.scale(28000)
+      .translate([width / 2, height / 2])
+      .scale([2800]);
+    var path = d3.geoPath().projection(projection);
+
+    console.log("step2 path", path, d3.json("fr_geo.json"));
+
+    //d3.json("us-states.json").then(function (jsondata) {
+    d3.json("fr_geo.json").then(function (jsondata) {
+      console.log("step2.0", path);
+      g.selectAll("path")
+        .data(jsondata.features)
+        .enter()
+        .append("path")
+        .attr("fill", "#ccc")
+        .attr("d", path);
+      console.log("step2.1");
+    });
+
+    //alert("End");
+  </script>
+  <!-- <h2>TEST 1.1</h1> -->
+</body>
