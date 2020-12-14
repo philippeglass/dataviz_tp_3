@@ -12,10 +12,24 @@
       bottom: 0;
       left: 0;
     }
+    div.tooltip {
+      color: #222;
+      background-color: #fff;
+      padding: 0.5em;
+      text-shadow: #f5f5f5 0 1px 0;
+      border-radius: 2px;
+      opacity: 0.9;
+      position: absolute;
+    }
   </style>
 </head>
 
 <body>
+  <div>
+    <input id="slider" type="range" value="1" min="1" max="43" step="1" />
+    <span id="day">Jour </span>
+  </div>
+
   <script>
     /* */
     console.log("step0");
@@ -28,8 +42,47 @@
       .attr("width", width)
       .attr("height", height);
 
+    // Remplissage des dates
+    var dateFormat = d3.timeFormat("%d/%m/%Y");
+    var weekFormat = d3.timeFormat("%V");
+
+    beginDate = new Date(2020, 2, 18);
+    bginDateStr = dateFormat(beginDate);
+    daysArray = [];
+    daysArray.push(bginDateStr);
+
+    weeksArray = [];
+    weeksArray.push(weekFormat(beginDate));
+
+    nextDate = beginDate;
+    var week = weekFormat(beginDate); //d3.timeWeeks(beginDate);
+    //alert("week:" + week);
+
+    for (i = 0; i < 43; i++) {
+      nextDate.setDate(nextDate.getDate() + 1);
+      daysArray.push(dateFormat(nextDate));
+      weeksArray.push(weekFormat(nextDate));
+      //console.log("dateStr = " + dateStr);
+    }
+    console.log(daysArray);
+
+    //alert("test");
+    //format(new Date(2011, 0, 1));
+
+    var txtSlider = d3.select("#day");
+
+    // Listen to the slider?
+    d3.select("#slider").on("input", function (d) {
+      updateViz(this.value);
+    });
+
     // On rajoute un groupe englobant toute la visualisation pour plus tard
     var g = svg.append("g");
+
+    var tooltip = d3
+      .select("body")
+      .append("div")
+      .attr("class", "hidden tooltip");
 
     var projection = d3
       //.geoAlbersUsa()
@@ -40,20 +93,218 @@
       .scale([2800]);
     var path = d3.geoPath().projection(projection);
 
-    console.log("step2 path", path, d3.json("fr_geo.json"));
+    //colorsArray = ["#edf8e9", "#bae4b3", "#74c476", "#31a354", "#006d2c"];
 
-    //d3.json("us-states.json").then(function (jsondata) {
-    d3.json("fr_geo.json").then(function (jsondata) {
-      console.log("step2.0", path);
-      g.selectAll("path")
-        .data(jsondata.features)
-        .enter()
-        .append("path")
-        .attr("fill", "#ccc")
-        .attr("d", path);
-      console.log("step2.1");
-    });
+    nbColors = 30;
+    colorsArray = [];
+    console.log("test1 = ", toDec("#FFFFFF"));
+    console.log("test2 = ", toDec("#006400"));
+    //alert("test");
 
+    //rgbBegin = [255, 255, 255];
+    //rgbEnd = [0, 100, 0];
+    // Construction de la palette de couleur
+    colorsArray = buildColorsArray("#FFFFFF", "#006400", nbColors);
+
+    //alert("step0");
+    // On définit }{} l’échelle de couleur
+    var color = d3.scaleQuantize().range(colorsArray);
+
+    updateSliderDate(0);
+    drawMap(bginDateStr, false);
+
+    function updateSliderDate(value) {
+      dateStr = daysArray[value];
+      var week = weeksArray[value];
+
+      d3.select("#day").text("jour " + dateStr + " semaine " + week);
+    }
+
+    // update the elements
+    function updateViz(value) {
+      updateSliderDate(value);
+      console.log(daysArray);
+      dateStr = daysArray[value];
+      //console.log("slider value = ", value, dateStr, daysArray);
+      drawMap(dateStr, true);
+    }
+
+    // Complete les données manquantes JSON en piochant dans les données CSV
+    function mergeData(json, csvData, currentDay) {
+      // Initialisation
+      for (var j = 0; j < json.features.length; j++) {
+        json.features[j].properties.hosp = "";
+        json.features[j].properties.jour = "";
+      }
+      for (var i = 0; i < csvData.length; i++) {
+        //Nom de l'etat
+        var dataDept = csvData[i].dep;
+
+        //Valeur associee a l'etat
+        var dataHosp = parseFloat(csvData[i].hosp);
+        var dataJour = csvData[i].jour;
+        /*
+        if (currentDay == "01/04/2020") {
+          console.log(currentDay, dataJour, dataJour == currentDay);
+        }*/
+        if (i < 0) {
+          console.log(
+            "i=" + i + ", dataDept = " + dataDept + ", dataJour = " + dataJour
+          );
+        }
+        if (dataJour == currentDay) {
+          console.log(dataJour, currentDay);
+          //Recherche du département dans le GeoJSON
+          for (var j = 0; j < json.features.length; j++) {
+            var jsonDept = json.features[j].properties.code;
+            if (i < 5 && j < 5) {
+              console.log("jsonDept = " + jsonDept);
+            }
+            if (1 * dataDept == 1 * jsonDept) {
+              //console.log("dep found  : jsonDept = " + jsonDept);
+              //On injecte la valeur du département dans le json
+              json.features[j].properties.hosp = dataHosp;
+              json.features[j].properties.jour = dataJour;
+              if (1 * dataDept == 75) {
+                console.log(json.features[j].properties);
+              }
+              //Pas besoin de chercher plus loin
+              break;
+            }
+          }
+        }
+      }
+      return json;
+    }
+
+    // Chargement des donnees
+    function drawMap(currentDay, refresh) {
+      console.log("drawMap currentDay = ", currentDay);
+      d3.csv("covid-france-mars-avril.csv").then(function (data) {
+        //console.log("step2.2", data);
+        //alert("step2.2");
+        //Set input domain for color scale
+        color.domain([0, 2000]);
+
+        d3.json("fr_geo.json").then(function (json) {
+          console.log("before mergeData", json);
+          //On fusionne les donnees avec le GeoJSON
+          json = mergeData(json, data, currentDay);
+          if (refresh) {
+            // Traitement d'une mise à jour de la carte suite à changement de jour sur le slider
+            carte = svg.selectAll("path").data(json.features);
+
+            // code en cas de mise a jour de la carte / de changement de semaine
+            carte.attr("class", "update").style("fill", handleFill);
+          } else {
+            // traitement de la création de la carte
+            svg
+              .selectAll("path")
+              .data(json.features)
+              .enter()
+              .append("path")
+              .attr("d", path)
+              .attr("class", function (d) {
+                // chaque forme representant un etat aura
+                // deux classes province et un identifiant venant du json
+                return "hosp " + d.properties.hosp;
+              })
+              .style("fill", handleFill)
+              .style("stroke", "black")
+              .style("stroke-width", "0.5px")
+              //.attr("style", "outline: thin solid red;") //This will do the job
+              .on("mousemove", handleMousemove)
+              .on("mouseout", handleMouseOut);
+          }
+        });
+
+        //alert("FOO_2");
+      });
+    }
+
+    function handleFill(d) {
+      //on prend la valeur recuperee plus haut
+      //console.log("d", d);
+      var value = d.properties.hosp;
+      if (value) {
+        return color(value);
+      } else {
+        // si pas de valeur alors en gris
+        return "#ccc";
+      }
+    }
+
+    function handleMousemove(event, d) {
+      //console.log(d.properties);
+      //alert("mousemove");
+      // on recupere la position de la souris
+      var mousePosition = d3.pointer(event);
+      //console.log(mousePosition);
+      // on affiche le toolip
+      tooltip
+        .classed("hidden", false)
+        // on positionne le tooltip en fonction
+        // de la position de la souris
+        .attr(
+          "style",
+          "left:" +
+            (mousePosition[0] + 15) +
+            "px; top:" +
+            (mousePosition[1] - 35) +
+            "px"
+        )
+        // on recupere le nom de l'etat
+        .html(d.properties.nom + " : " + d.properties.hosp);
+    }
+
+    function handleMouseOut() {
+      // on cache le toolip
+      tooltip.classed("hidden", true);
+    }
+
+    function toDec(colorHexa) {
+      rHexa = colorHexa.substring(1, 3);
+      gHexa = colorHexa.substring(3, 5);
+      bHexa = colorHexa.substring(5, 7);
+      result = [0, 0, 0];
+      result[0] = parseInt(rHexa, 16);
+      result[1] = parseInt(gHexa, 16);
+      result[2] = parseInt(bHexa, 16);
+      return result;
+    }
+    function toHexec1(num) {
+      num1 = Math.round(num);
+      result = num1.toString(16);
+      //console.log("toHexec1");
+      if (result.length < 2) {
+        result = "0" + result;
+      }
+      return result;
+    }
+
+    function buildColorsArray(colorBegin, colorEnd, nbColors) {
+      rgbBegin = toDec(colorBegin);
+      rgbEnd = toDec(colorEnd);
+
+      //nbColors = 30;
+      colorsArray = [];
+
+      //rgbBegin = [255, 255, 255];
+      //rgbEnd = [0, 100, 0];
+      r = rgbBegin[0];
+      g = rgbBegin[1];
+      b = rgbBegin[2];
+      for (colorIndex = 0; colorIndex < nbColors; colorIndex++) {
+        nextColor = "#" + toHexec1(r) + toHexec1(g) + toHexec1(b);
+        console.log("nextColor = ", nextColor);
+        colorsArray.push(nextColor);
+        r = r - (rgbBegin[0] - rgbEnd[0]) / nbColors;
+        g = g - (rgbBegin[1] - rgbEnd[1]) / nbColors;
+        b = b - (rgbBegin[2] - rgbEnd[2]) / nbColors;
+        //console.log("r g b =", r, g, b);
+      }
+      return colorsArray;
+    }
     //alert("End");
   </script>
   <!-- <h2>TEST 1.1</h1> -->
